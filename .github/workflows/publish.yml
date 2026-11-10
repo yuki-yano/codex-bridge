@@ -1,0 +1,46 @@
+# Publish to npm with trusted publishing (GitHub Actions OIDC) when a version tag is pushed.
+# The trusted publisher on npmjs.com is configured for this file name (publish.yml).
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: pnpm install --frozen-lockfile
+      - name: Check that the tag matches the package version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match package.json version ${version}" >&2
+            exit 1
+          fi
+      - run: pnpm check
+      - run: pnpm pack
+      # npm 11.5.1 or later publishes with the OIDC token and adds provenance automatically.
+      - run: npm install -g npm@^11.5.1
+      - name: Publish
+        run: npm publish "./yuki-yano-codex-bridge-${GITHUB_REF_NAME#v}.tgz" --access public
