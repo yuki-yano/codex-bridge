@@ -55,7 +55,10 @@ export class CodexSession {
   }
 
   // 利用者の MCP サーバーはすべて無効にし、overrides で必要な機能だけを有効にして起動する。
-  async launch(overrides: Array<string>): Promise<void> {
+  async launch(
+    overrides: Array<string>,
+    { startThread = true, env = process.env } = {},
+  ): Promise<void> {
     if (!existsSync(this.codex))
       throw new CliError(
         'codex_unavailable',
@@ -77,6 +80,7 @@ export class CodexSession {
       ['app-server', '--stdio', ...settings.flatMap((v) => ['-c', v])],
       {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env,
       },
     );
     this.proc = proc;
@@ -132,6 +136,7 @@ export class CodexSession {
       capabilities: { experimentalApi: true },
     });
     this.send({ method: 'initialized' });
+    if (!startThread) return;
     const started = await this.rpc<{ thread: { id: string } }>('thread/start', {
       ephemeral: true,
       cwd: process.cwd(),

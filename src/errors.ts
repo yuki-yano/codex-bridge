@@ -6,7 +6,12 @@ export type ErrorCode =
   | 'tool_unavailable'
   | 'interaction_required'
   | 'plugin_unavailable'
-  | 'source_error';
+  | 'source_error'
+  | 'browser_unavailable'
+  | 'browser_busy'
+  | 'browser_delivery_unknown'
+  | 'browser_turn_failed'
+  | 'browser_wait_timeout';
 
 export class CliError extends Error {
   code: ErrorCode;

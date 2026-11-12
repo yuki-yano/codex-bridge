@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { browser } from './browser.ts';
 import { CliError } from './errors.ts';
 import { history } from './history.ts';
 import { generateImage } from './image.ts';
@@ -13,7 +14,8 @@ const help = `codex-bridge — 結果は1行のJSON（成功0／失敗1／構文
   pages|sites tools [ツール名]      ツール一覧、またはツールの説明と引数のJSON Schema
   pages|sites call ツール名 [--args 'JSON'|@絶対パス|-] [--write]
   image generate --prompt 内容 [--input 元画像]... [--out 保存先]
-変更操作には依頼・承認と--writeが必要。モデルを呼ぶのは image generate だけ（ChatGPTの利用枠を消費）。
+  browser run [--thread AppチャットID] 依頼   --thread 省略時は CODEX_BRIDGE_BROWSER_THREAD_ID（カンマ区切り可）
+Pages・Sitesの変更操作には依頼・承認と--writeが必要。image generate と browser run はChatGPTの利用枠を消費。
 説明書: ${join(import.meta.dir, '../README.md')}`;
 
 const options = {
@@ -30,6 +32,7 @@ const options = {
   prompt: { type: 'string' },
   input: { type: 'string', multiple: true },
   out: { type: 'string' },
+  thread: { type: 'string' },
 } as const;
 
 // サブコマンドごとに受け付けるオプション。ほかを黙って無視すると、絞り込んだつもりの結果を誤解させる。
@@ -40,10 +43,11 @@ const accepted: Record<string, Array<string>> = {
   tools: [],
   call: ['args', 'write'],
   'image generate': ['prompt', 'input', 'out'],
+  'browser run': ['thread'],
 };
 
 export type Command = {
-  service: 'history' | 'image' | Service;
+  service: 'history' | 'image' | 'browser' | Service;
   action: string;
   tool?: string;
   args: string;
@@ -58,6 +62,7 @@ export type Command = {
   prompt?: string;
   input?: Array<string>;
   out?: string;
+  thread?: string;
 };
 
 export function parse(argv: Array<string>): Command | { help: true } {
@@ -75,12 +80,18 @@ export function parse(argv: Array<string>): Command | { help: true } {
       ? !tool && ['status', 'summaries', 'events'].includes(action ?? '')
       : service === 'image'
         ? !tool && action === 'generate'
-        : Object.hasOwn(SERVICES, service ?? '') &&
-          (action === 'tools' || (action === 'call' && !!tool));
+        : service === 'browser'
+          ? action === 'run' && !!tool?.trim()
+          : Object.hasOwn(SERVICES, service ?? '') &&
+            (action === 'tools' || (action === 'call' && !!tool));
   if (rest.length || !valid) throw new Error('Invalid command; use --help');
   const given = tokens.flatMap((t) => (t.kind === 'option' ? [t.name] : []));
   const allowed =
-    accepted[service === 'history' || service === 'image' ? `${service} ${action}` : action!] ?? [];
+    accepted[
+      service === 'history' || service === 'image' || service === 'browser'
+        ? `${service} ${action}`
+        : action!
+    ] ?? [];
   const unsupported = given.find((name) => !allowed.includes(name));
   if (unsupported) throw new Error(`--${unsupported} is not used by this command; use --help`);
   const repeated = given.find((name, i) => name !== 'input' && given.indexOf(name) !== i);
@@ -110,7 +121,9 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         ? { ok: true, data: await history(a) }
         : a.service === 'image'
           ? await generateImage(a)
-          : await remote(a as Command & { service: Service });
+          : a.service === 'browser'
+            ? { ok: true, data: await browser(a) }
+            : await remote(a as Command & { service: Service });
   } catch (e) {
     result = {
       ok: false,

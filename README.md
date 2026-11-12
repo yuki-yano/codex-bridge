@@ -1,11 +1,11 @@
 # codex-bridge
 
-このMacのComputer Historyと、Codexに接続済みのChatGPT Pages・Sites、Codexの画像生成を、ほかのAgentからコマンドで使うためのBun CLI。
+このMacのComputer History、Codexに接続済みのChatGPT Pages・Sites、画像生成、ChatGPTの公式ブラウザ拡張をコマンドで使うためのBun CLI。
 
 - 結果は1行のJSON。終了コードは成功0、取得・検証・実行の失敗1、構文エラー2。失敗の種類は`error.code`で返す（一覧は`skills/codex-bridge/SKILL.md`）。
 - Pages・Sitesは既存のCodex app-serverと、そのログイン・workspaceの権限で呼び出す。新しいサーバー、待受ポート、認証は追加しない。
-- モデルを使うのは`image generate`だけ。ChatGPTのプランの利用枠を消費する。
-- 変更操作は`--write`がないと送信前に拒否する。
+- `image generate`と`browser run`はモデルを使い、ChatGPTのプランの利用枠を消費する。
+- Pages・Sitesの変更操作は`--write`がないと送信前に拒否する。
 
 ## 注意
 
@@ -125,6 +125,19 @@ codex-bridge image generate --prompt 'この写真を水彩画風に' --input ./
 
 Codexのモデルに、画像生成ツールで1枚だけ生成させる。1回に30秒前後かかり、ChatGPTのプランの利用枠を消費する。結果の`data.path`が画像のパス（`--out`を指定した場合はそのパス、指定しない場合はCodexの保存先`~/.codex/generated_images/`）。`--out`に既存のファイルは指定できない。
 
+### 公式ブラウザ拡張で操作する
+
+ChatGPT Appで公式拡張が接続済みのブラウザを使う。シェルの起動設定で`CODEX_BRIDGE_BROWSER_THREAD_ID`をexportしておくと、そのシェルから起動した`codex --no-daemon`でもIDの入力を省ける。複数のUUIDをカンマで区切ると、指定順に空いているチャットを探す。
+
+```sh
+export CODEX_BRIDGE_BROWSER_THREAD_ID='Appチャット1のUUID,Appチャット2のUUID'
+codex-bridge browser run '今開いているブラウザのタブ一覧を教えて'
+```
+
+`/app`で開いたチャットのIDも指定できる。呼び出し元とは別の、普段は待機しているチャットを送り先にする。今回だけ送り先を変える場合は`browser run --thread ID '依頼'`を使う。`--thread`が環境変数より優先される。全候補が使用中なら`browser_busy`を返す。
+
+必要に応じてAppのチャットを開き、Appに依頼を送り、最大5分待って最終回答を`data.text`に返す。ブラウザの承認が出た場合はAppで応答する。結果が不明なときは、再送する前にApp側の実行状況を確認する。Appの非公開IPCを使用するため、Appの更新で接続できなくなる場合がある。
+
 ## 変更する場合
 
 Pages・Sitesの作成・編集・削除・共有・公開やSitesのソース操作（`source_checkout`・`source_prepare`）には`--write`が必須。付けない場合はCodexへ接続する前にエラーにする。これは操作ミスを防ぐための指定であり、ユーザーの依頼や承認に代わるものではない。
@@ -133,7 +146,7 @@ Sitesのリポジトリ認証情報を返すツール（`create_source_repositor
 
 ## Agentから使う
 
-Agent向けの手順と運用ルール（書き込みの条件、Pagesの編集手順、Sitesのソース操作と公開、Computer Historyの読み方、画像生成）は`skills/codex-bridge/`にある。使うハーネスのskillの置き場所へコピーする。Codexでpages・sitesのconnectorを直接使えるときは対象外。
+Agent向けの手順と運用ルールは`skills/codex-bridge/`にある。使うハーネスのskillの置き場所へコピーする。Codexでpages・sitesのconnectorを直接使えるときは対象外。
 
 ```sh
 cp -R skills/codex-bridge ~/.claude/skills/   # Claude Codeの例
