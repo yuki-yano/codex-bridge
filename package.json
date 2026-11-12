@@ -1,6 +1,6 @@
 {
   "name": "@yuki-yano/codex-bridge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Computer History と Codex 接続済みの ChatGPT Pages・Sites を JSON で扱う Bun CLI",
   "keywords": [
     "agent",
